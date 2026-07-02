@@ -1,0 +1,6 @@
+node_modules
+dist
+coverage
+generated
+# Keep environment variables out of version control
+.env

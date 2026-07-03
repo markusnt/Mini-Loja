@@ -1,7 +1,10 @@
+import { useState } from 'react'
+
+import { CategoryFormDialog } from '@/components/categories/category-form-dialog'
+import { CategoriesTable } from '@/components/categories/categories-table'
 import { PageHeader } from '@/components/crud/page-header'
 import { SearchInput } from '@/components/crud/search-input'
 import { ErrorState, LoadingState } from '@/components/crud/status-message'
-import { CategoriesTable } from '@/components/categories/categories-table'
 import { useCategories } from '@/hooks/use-categories'
 import type { Category } from '@/types/catalog'
 
@@ -13,7 +16,36 @@ export function CategoriesPage() {
     isLoading,
     error,
     removeCategory,
+    createCategory,
+    updateCategory,
   } = useCategories()
+
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+
+  const handleOpenCreate = () => {
+    setEditingCategory(null)
+    setDialogOpen(true)
+  }
+
+  const handleOpenEdit = (category: Category) => {
+    setEditingCategory(category)
+    setDialogOpen(true)
+  }
+
+  const handleCloseDialog = () => {
+    setDialogOpen(false)
+    setEditingCategory(null)
+  }
+
+  const handleSubmit = async (name: string) => {
+    if (editingCategory) {
+      await updateCategory(editingCategory.id, { name })
+      return
+    }
+
+    await createCategory({ name })
+  }
 
   const handleDelete = async (category: Category) => {
     const confirmed = window.confirm(
@@ -39,6 +71,7 @@ export function CategoriesPage() {
         title="Categorias"
         description="Gerencie as categorias dos produtos da loja."
         actionLabel="Nova categoria"
+        onAction={handleOpenCreate}
       />
 
       <div className="flex flex-1 flex-col gap-4 p-6">
@@ -53,9 +86,20 @@ export function CategoriesPage() {
         ) : error ? (
           <ErrorState message={error} />
         ) : (
-          <CategoriesTable categories={categories} onDelete={handleDelete} />
+          <CategoriesTable
+            categories={categories}
+            onEdit={handleOpenEdit}
+            onDelete={handleDelete}
+          />
         )}
       </div>
+
+      <CategoryFormDialog
+        open={dialogOpen}
+        category={editingCategory}
+        onClose={handleCloseDialog}
+        onSubmit={handleSubmit}
+      />
     </div>
   )
 }

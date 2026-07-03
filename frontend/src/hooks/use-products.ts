@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { productsService } from '@/services/products.service'
-import type { Product } from '@/types/catalog'
+import type {
+  CreateProductInput,
+  Product,
+  UpdateProductInput,
+} from '@/types/catalog'
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([])
@@ -41,6 +45,22 @@ export function useProducts() {
     [loadProducts, search],
   )
 
+  const createProduct = useCallback(
+    async (data: CreateProductInput) => {
+      await productsService.create(data)
+      await loadProducts(search)
+    },
+    [loadProducts, search],
+  )
+
+  const updateProduct = useCallback(
+    async (id: number, data: UpdateProductInput) => {
+      await productsService.update(id, data)
+      await loadProducts(search)
+    },
+    [loadProducts, search],
+  )
+
   return {
     products,
     search,
@@ -49,5 +69,7 @@ export function useProducts() {
     error,
     reload: () => loadProducts(search),
     removeProduct,
+    createProduct,
+    updateProduct,
   }
 }

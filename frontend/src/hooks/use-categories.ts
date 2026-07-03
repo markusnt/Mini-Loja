@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { categoriesService } from '@/services/categories.service'
-import type { Category } from '@/types/catalog'
+import type { Category, CreateCategoryInput, UpdateCategoryInput } from '@/types/catalog'
 
 export function useCategories() {
   const [categories, setCategories] = useState<Category[]>([])
@@ -41,6 +41,22 @@ export function useCategories() {
     [loadCategories, search],
   )
 
+  const createCategory = useCallback(
+    async (data: CreateCategoryInput) => {
+      await categoriesService.create(data)
+      await loadCategories(search)
+    },
+    [loadCategories, search],
+  )
+
+  const updateCategory = useCallback(
+    async (id: number, data: UpdateCategoryInput) => {
+      await categoriesService.update(id, data)
+      await loadCategories(search)
+    },
+    [loadCategories, search],
+  )
+
   return {
     categories,
     search,
@@ -49,5 +65,7 @@ export function useCategories() {
     error,
     reload: () => loadCategories(search),
     removeCategory,
+    createCategory,
+    updateCategory,
   }
 }

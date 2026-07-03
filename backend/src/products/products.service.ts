@@ -1,33 +1,48 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, Product } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ListProductsQueryDto } from './dto/list-products.query.dto';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
+import { PaginatedResponse } from './types/paginated-response.type';
+
+type ProductWithCategory = Product & {
+  category: { id: number; name: string };
+};
 
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(search?: string) {
-    const where: Prisma.ProductWhereInput = search
-      ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { description: { contains: search, mode: 'insensitive' } },
-          ],
-        }
-      : {};
+  async findAll(
+    query: ListProductsQueryDto,
+  ): Promise<PaginatedResponse<ProductWithCategory>> {
+    const { page, limit, search } = query;
+    const where = this.buildSearchFilter(search);
+    const skip = (page - 1) * limit;
 
-    return this.prisma.product.findMany({
-      where,
-      orderBy: { name: 'asc' },
-      include: { category: true },
-    });
+    const [data, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { name: 'asc' },
+        include: { category: true },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: total > 0 ? Math.ceil(total / limit) : 1,
+      },
+    };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number): Promise<ProductWithCategory> {
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: { category: true },
@@ -40,7 +55,7 @@ export class ProductsService {
     return product;
   }
 
-  async create(dto: CreateProductDto) {
+  async create(dto: CreateProductDto): Promise<ProductWithCategory> {
     await this.ensureCategoryExists(dto.categoryId);
 
     return this.prisma.product.create({
@@ -49,7 +64,10 @@ export class ProductsService {
     });
   }
 
-  async update(id: number, dto: UpdateProductDto) {
+  async update(
+    id: number,
+    dto: UpdateProductDto,
+  ): Promise<ProductWithCategory> {
     await this.findOne(id);
 
     if (dto.categoryId) {
@@ -63,9 +81,22 @@ export class ProductsService {
     });
   }
 
-  async remove(id: number) {
+  async remove(id: number): Promise<void> {
     await this.findOne(id);
     await this.prisma.product.delete({ where: { id } });
+  }
+
+  private buildSearchFilter(search?: string): Prisma.ProductWhereInput {
+    if (!search) {
+      return {};
+    }
+
+    return {
+      OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ],
+    };
   }
 
   private async ensureCategoryExists(categoryId: number) {

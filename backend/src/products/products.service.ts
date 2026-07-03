@@ -3,6 +3,7 @@ import { Prisma, Product } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ListProductsQueryDto } from './dto/list-products.query.dto';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
+import { ProductsCacheService } from './products-cache.service';
 import { PaginatedResponse } from './types/paginated-response.type';
 
 type ProductWithCategory = Product & {
@@ -11,11 +12,21 @@ type ProductWithCategory = Product & {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: ProductsCacheService,
+  ) {}
 
   async findAll(
     query: ListProductsQueryDto,
   ): Promise<PaginatedResponse<ProductWithCategory>> {
+    const cached =
+      await this.cache.getList<PaginatedResponse<ProductWithCategory>>(query);
+
+    if (cached) {
+      return cached;
+    }
+
     const { page, limit, search } = query;
     const where = this.buildSearchFilter(search);
     const skip = (page - 1) * limit;
@@ -31,7 +42,7 @@ export class ProductsService {
       this.prisma.product.count({ where }),
     ]);
 
-    return {
+    const result: PaginatedResponse<ProductWithCategory> = {
       data,
       meta: {
         page,
@@ -40,9 +51,18 @@ export class ProductsService {
         totalPages: total > 0 ? Math.ceil(total / limit) : 1,
       },
     };
+
+    await this.cache.setList(query, result);
+    return result;
   }
 
   async findOne(id: number): Promise<ProductWithCategory> {
+    const cached = await this.cache.getItem<ProductWithCategory>(id);
+
+    if (cached) {
+      return cached;
+    }
+
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: { category: true },
@@ -52,16 +72,20 @@ export class ProductsService {
       throw new NotFoundException(`Produto ${id} não encontrado.`);
     }
 
+    await this.cache.setItem(id, product);
     return product;
   }
 
   async create(dto: CreateProductDto): Promise<ProductWithCategory> {
     await this.ensureCategoryExists(dto.categoryId);
 
-    return this.prisma.product.create({
+    const product = await this.prisma.product.create({
       data: dto,
       include: { category: true },
     });
+
+    await this.cache.invalidateAllProducts();
+    return product;
   }
 
   async update(
@@ -74,16 +98,20 @@ export class ProductsService {
       await this.ensureCategoryExists(dto.categoryId);
     }
 
-    return this.prisma.product.update({
+    const product = await this.prisma.product.update({
       where: { id },
       data: dto,
       include: { category: true },
     });
+
+    await this.cache.invalidateProduct(id);
+    return product;
   }
 
   async remove(id: number): Promise<void> {
     await this.findOne(id);
     await this.prisma.product.delete({ where: { id } });
+    await this.cache.invalidateProduct(id);
   }
 
   private buildSearchFilter(search?: string): Prisma.ProductWhereInput {

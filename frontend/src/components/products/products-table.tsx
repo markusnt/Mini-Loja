@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 import { EmptyTableRow } from '@/components/crud/empty-table-row'
 import { RowActions } from '@/components/crud/row-actions'
 import { Badge } from '@/components/ui/badge'
@@ -45,7 +47,14 @@ export function ProductsTable({
               products.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>{product.id}</TableCell>
-                  <TableCell className="font-medium">{product.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      to={`/produtos/${product.id}`}
+                      className="hover:underline"
+                    >
+                      {product.name}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground hidden max-w-xs truncate md:table-cell">
                     {product.description}
                   </TableCell>

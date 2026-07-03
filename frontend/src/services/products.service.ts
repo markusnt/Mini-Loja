@@ -1,14 +1,34 @@
 import { api } from '@/services/api-client'
 import type {
   CreateProductInput,
+  ListProductsParams,
+  PaginatedResponse,
   Product,
   UpdateProductInput,
 } from '@/types/catalog'
 
+function buildQuery(params?: ListProductsParams) {
+  const searchParams = new URLSearchParams()
+
+  if (params?.page) {
+    searchParams.set('page', String(params.page))
+  }
+
+  if (params?.limit) {
+    searchParams.set('limit', String(params.limit))
+  }
+
+  if (params?.search) {
+    searchParams.set('search', params.search)
+  }
+
+  const query = searchParams.toString()
+  return query ? `?${query}` : ''
+}
+
 export const productsService = {
-  list(search?: string) {
-    const query = search ? `?search=${encodeURIComponent(search)}` : ''
-    return api<Product[]>(`/products${query}`)
+  list(params?: ListProductsParams) {
+    return api<PaginatedResponse<Product>>(`/products${buildQuery(params)}`)
   },
 
   getById(id: number) {

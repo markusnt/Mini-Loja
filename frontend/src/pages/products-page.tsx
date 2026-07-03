@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { Pagination } from '@/components/crud/pagination'
 import { PageHeader } from '@/components/crud/page-header'
 import { SearchInput } from '@/components/crud/search-input'
 import { ErrorState, LoadingState } from '@/components/crud/status-message'
@@ -13,8 +14,11 @@ export function ProductsPage() {
     products,
     search,
     setSearch,
+    meta,
     isLoading,
     error,
+    nextPage,
+    prevPage,
     removeProduct,
     createProduct,
     updateProduct,
@@ -91,11 +95,14 @@ export function ProductsPage() {
         ) : error ? (
           <ErrorState message={error} />
         ) : (
-          <ProductsTable
-            products={products}
-            onEdit={handleOpenEdit}
-            onDelete={handleDelete}
-          />
+          <>
+            <ProductsTable
+              products={products}
+              onEdit={handleOpenEdit}
+              onDelete={handleDelete}
+            />
+            <Pagination meta={meta} onPrevious={prevPage} onNext={nextPage} />
+          </>
         )}
       </div>
 

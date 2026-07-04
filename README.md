@@ -2,14 +2,35 @@
 
 Monorepo full-stack: **NestJS + Prisma + PostgreSQL + Redis** (backend) e **React + Vite** (frontend).
 
+Repositório: https://github.com/markusnt/Mini-Loja
+
 ## Estrutura
 
 ```
 DesafioNtt/
-├── backend/src/          # API NestJS (modules: products, categories, prisma, redis)
+├── backend/src/          # API NestJS (products, categories, prisma, redis)
 ├── frontend/src/         # React (pages → hooks → services → API)
 ├── docker-compose.yml    # PostgreSQL + Redis
 └── README.md
+```
+
+- **Backend:** `Controller → Service → CacheService → Prisma`, DTOs com `class-validator` + `ValidationPipe` global
+- **Frontend:** CRUD de produtos (listagem paginada, formulário e detalhes em Sheet) e categorias (listagem, formulário, detalhes, bloqueio de exclusão com produtos vinculados)
+
+## Arquitetura
+
+```
+┌─────────────┐     proxy /api      ┌──────────────┐     Prisma     ┌────────────┐
+│  Frontend   │ ──────────────────► │   Backend    │ ────────────► │ PostgreSQL │
+│  React/Vite │   localhost:5173    │   NestJS     │               │  (Docker)  │
+└─────────────┘                     └──────┬───────┘               └────────────┘
+                                           │
+                                           │ cache GET
+                                           ▼
+                                    ┌────────────┐
+                                    │   Redis    │
+                                    │  (Docker)  │
+                                    └────────────┘
 ```
 
 ## Como subir
@@ -21,20 +42,32 @@ DesafioNtt/
 docker compose up -d
 
 # 2. Backend (http://localhost:3000/api)
-cd backend && cp .env.example .env && npm i
-npm run prisma:generate && npm run prisma:migrate && npm run start:dev
+cd backend
+cp .env.example .env
+npm install
+npm run prisma:generate
+npm run prisma:migrate
+npm run start:dev
 
 # 3. Frontend (http://localhost:5173) — proxy /api → backend
-cd frontend && npm i && npm run dev
+cd frontend
+npm install
+npm run dev
 ```
 
-Variáveis de ambiente em `backend/.env` (ver `.env.example`).
+Valores para `backend/.env` com o Docker local:
+
+```
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/desafio_ntt?schema=public"
+REDIS_URL="redis://localhost:6379"
+```
 
 ## Testar endpoints
 
 Base: `http://localhost:3000/api`
 
 ```bash
+# Health — verifica PostgreSQL (SELECT 1) e Redis (PING)
 curl http://localhost:3000/api/health
 
 # Categorias (CRUD)
@@ -57,21 +90,29 @@ curl -X DELETE http://localhost:3000/api/products/1
 
 ## Estratégia de cache (Redis)
 
-Leituras (`GET /products`, `GET /products/:id`, `GET /categories`, `GET /categories/:id`) consultam Redis primeiro. Em cache miss, busca no PostgreSQL e grava com **TTL 300s**.
+Leituras (`GET /products`, `GET /products/:id`, `GET /categories`, `GET /categories/:id`) consultam Redis primeiro. Em cache miss, busca no PostgreSQL e grava com **TTL 300s**. Invalidação em lote via `SCAN` + `DEL`.
 
-| Chave | Invalidação |
-|-------|-------------|
-| `products:list:page:{p}:limit:{l}:search:{s}` | mutação em produto ou categoria |
-| `products:item:{id}` | PATCH/DELETE produto; PATCH/DELETE categoria |
-| `categories:list:search:{s}` | mutação em categoria ou produto |
-| `categories:item:{id}` | PATCH/DELETE categoria; mutação de produto na categoria |
+| Chave | TTL | Invalidação |
+|-------|-----|-------------|
+| `products:list:page:{p}:limit:{l}:search:{s}` | 300s | mutação em produto ou categoria |
+| `products:item:{id}` | 300s | PATCH/DELETE produto; PATCH/DELETE categoria |
+| `categories:list:search:{s}` | 300s | mutação em categoria ou produto |
+| `categories:item:{id}` | 300s | PATCH/DELETE categoria; mutação de produto na categoria |
 
 ```
-GET ──► Redis hit? ──sim──► resposta
-          │
-         não ──► PostgreSQL ──► salva Redis ──► resposta
+GET /products ou /categories
+        │
+        ▼
+   Existe no Redis? ──sim──► retorna JSON cacheado
+        │
+       não
+        ▼
+   Consulta PostgreSQL ──► grava no Redis (TTL 300s) ──► retorna
 
-POST/PATCH/DELETE ──► invalida chaves (SCAN+DEL) ──► operação no banco
+POST / PATCH / DELETE
+        │
+        ▼
+   Invalida chaves afetadas ──► executa operação no banco
 ```
 
 Invalidação cruzada garante consistência: ex. renomear categoria limpa cache de produtos que embutem o nome; criar produto atualiza `_count` da categoria.

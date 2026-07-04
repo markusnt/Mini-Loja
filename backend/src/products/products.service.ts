@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Product } from '@prisma/client';
+import { CategoriesCacheService } from '../categories/categories-cache.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ListProductsQueryDto } from './dto/list-products.query.dto';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
@@ -15,6 +16,7 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: ProductsCacheService,
+    private readonly categoriesCache: CategoriesCacheService,
   ) {}
 
   async findAll(
@@ -85,6 +87,7 @@ export class ProductsService {
     });
 
     await this.cache.invalidateAllProducts();
+    await this.categoriesCache.invalidateCategory(dto.categoryId);
     return product;
   }
 
@@ -92,7 +95,7 @@ export class ProductsService {
     id: number,
     dto: UpdateProductDto,
   ): Promise<ProductWithCategory> {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
 
     if (dto.categoryId) {
       await this.ensureCategoryExists(dto.categoryId);
@@ -105,13 +108,21 @@ export class ProductsService {
     });
 
     await this.cache.invalidateProduct(id);
+
+    const categoryIds = [existing.categoryId];
+    if (dto.categoryId && dto.categoryId !== existing.categoryId) {
+      categoryIds.push(dto.categoryId);
+    }
+    await this.categoriesCache.invalidateCategoriesByIds(categoryIds);
+
     return product;
   }
 
   async remove(id: number): Promise<void> {
-    await this.findOne(id);
+    const product = await this.findOne(id);
     await this.prisma.product.delete({ where: { id } });
     await this.cache.invalidateProduct(id);
+    await this.categoriesCache.invalidateCategory(product.categoryId);
   }
 
   private buildSearchFilter(search?: string): Prisma.ProductWhereInput {

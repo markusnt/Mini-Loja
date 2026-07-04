@@ -1,115 +1,79 @@
 # Desafio NTT — Mini Loja
 
-Aplicação full-stack para gerenciar produtos e categorias. Backend NestJS + Prisma + Redis; frontend React + Vite.
+Monorepo full-stack: **NestJS + Prisma + PostgreSQL + Redis** (backend) e **React + Vite** (frontend).
 
-## Visão geral
+## Estrutura
 
 ```
-┌─────────────┐     proxy /api      ┌──────────────┐     Prisma     ┌────────────┐
-│  Frontend   │ ──────────────────► │   Backend    │ ────────────► │ PostgreSQL │
-│  React/Vite │   localhost:5173    │   NestJS     │               │  (Docker)  │
-└─────────────┘                     └──────┬───────┘               └────────────┘
-                                           │
-                                           │ cache GET
-                                           ▼
-                                    ┌────────────┐
-                                    │   Redis    │
-                                    │  (Docker)  │
-                                    └────────────┘
+DesafioNtt/
+├── backend/src/          # API NestJS (modules: products, categories, prisma, redis)
+├── frontend/src/         # React (pages → hooks → services → API)
+├── docker-compose.yml    # PostgreSQL + Redis
+└── README.md
 ```
-
-**Frontend:** listagem paginada de produtos, formulários e detalhes em painéis laterais (Sheet). CRUD de categorias.
-
-**Backend:** API REST em `/api` com validação via DTOs. Leituras de produtos e categorias passam pelo Redis; mutações invalidam o cache relacionado.
 
 ## Como subir
 
-**1. Infraestrutura** (PostgreSQL + Redis):
+**Pré-requisitos:** Node.js 20+, Docker.
 
 ```bash
+# 1. Infraestrutura
 docker compose up -d
+
+# 2. Backend (http://localhost:3000/api)
+cd backend && cp .env.example .env && npm i
+npm run prisma:generate && npm run prisma:migrate && npm run start:dev
+
+# 3. Frontend (http://localhost:5173) — proxy /api → backend
+cd frontend && npm i && npm run dev
 ```
 
-**2. Backend** → `http://localhost:3000/api`
+Variáveis de ambiente em `backend/.env` (ver `.env.example`).
 
-```bash
-cd backend
-cp .env.example .env
-npm install
-npm run prisma:generate
-npm run prisma:migrate
-npm run start:dev
-```
-
-**3. Frontend** → `http://localhost:5173`
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## Testar endpoints (curl)
+## Testar endpoints
 
 Base: `http://localhost:3000/api`
 
 ```bash
-# Health
 curl http://localhost:3000/api/health
 
-# Categorias
-curl -X POST http://localhost:3000/api/categories \
-  -H "Content-Type: application/json" -d '{"name":"Eletrônicos"}'
+# Categorias (CRUD)
+curl -X POST http://localhost:3000/api/categories -H "Content-Type: application/json" -d '{"name":"Eletrônicos"}'
 curl http://localhost:3000/api/categories
-curl "http://localhost:3000/api/categories?search=ele"
 curl http://localhost:3000/api/categories/1
-curl -X PATCH http://localhost:3000/api/categories/1 \
-  -H "Content-Type: application/json" -d '{"name":"Eletrônicos e Acessórios"}'
-curl -X DELETE http://localhost:3000/api/categories/1
+curl -X PATCH http://localhost:3000/api/categories/1 -H "Content-Type: application/json" -d '{"name":"Informática"}'
+curl -X DELETE http://localhost:3000/api/categories/1   # 409 se houver produtos vinculados
 
-# Produtos (paginado)
-curl "http://localhost:3000/api/products?page=1&limit=10"
-curl "http://localhost:3000/api/products?page=1&limit=10&search=notebook"
-curl -X POST http://localhost:3000/api/products \
-  -H "Content-Type: application/json" \
+# Produtos (CRUD + paginação)
+curl "http://localhost:3000/api/products?page=1&limit=10&search=note"
+curl -X POST http://localhost:3000/api/products -H "Content-Type: application/json" \
   -d '{"name":"Notebook","description":"16GB RAM","price":3499.90,"categoryId":1}'
 curl http://localhost:3000/api/products/1
-curl -X PATCH http://localhost:3000/api/products/1 \
-  -H "Content-Type: application/json" -d '{"price":3299.90}'
+curl -X PATCH http://localhost:3000/api/products/1 -H "Content-Type: application/json" -d '{"price":3299.90}'
 curl -X DELETE http://localhost:3000/api/products/1
 ```
 
-Resposta paginada de `GET /products`:
-
-```json
-{ "data": [/* produtos com category */], "meta": { "page": 1, "limit": 10, "total": 42, "totalPages": 5 } }
-```
+`GET /products` retorna `{ data: Product[], meta: { page, limit, total, totalPages } }`.
 
 ## Estratégia de cache (Redis)
 
-TTL padrão: **300s** (5 min). Chaves via `SCAN` + `DEL` na invalidação em lote.
+Leituras (`GET /products`, `GET /products/:id`, `GET /categories`, `GET /categories/:id`) consultam Redis primeiro. Em cache miss, busca no PostgreSQL e grava com **TTL 300s**.
 
-| Recurso | Chave | Quando invalida |
-|---------|-------|-----------------|
-| Lista de produtos | `products:list:page:{p}:limit:{l}:search:{term\|all}` | POST/PATCH/DELETE produto; PATCH/DELETE categoria |
-| Produto por ID | `products:item:{id}` | PATCH/DELETE produto; PATCH/DELETE categoria |
-| Lista de categorias | `categories:list:search:{term\|all}` | POST/PATCH/DELETE categoria; mutações de produto |
-| Categoria por ID | `categories:item:{id}` | PATCH/DELETE categoria; mutações de produto na categoria |
+| Chave | Invalidação |
+|-------|-------------|
+| `products:list:page:{p}:limit:{l}:search:{s}` | mutação em produto ou categoria |
+| `products:item:{id}` | PATCH/DELETE produto; PATCH/DELETE categoria |
+| `categories:list:search:{s}` | mutação em categoria ou produto |
+| `categories:item:{id}` | PATCH/DELETE categoria; mutação de produto na categoria |
 
 ```
-GET /products ou /categories
-        │
-        ▼
-   Existe no Redis? ──sim──► retorna JSON cacheado
-        │
-       não
-        ▼
-   Consulta PostgreSQL ──► grava no Redis (TTL 300s) ──► retorna
+GET ──► Redis hit? ──sim──► resposta
+          │
+         não ──► PostgreSQL ──► salva Redis ──► resposta
 
-POST / PATCH / DELETE
-        │
-        ▼
-   Invalida chaves afetadas ──► executa operação no banco
+POST/PATCH/DELETE ──► invalida chaves (SCAN+DEL) ──► operação no banco
 ```
 
-**Invalidação cruzada:** ao alterar um produto, o contador `_count.products` das categorias é atualizado no cache. Ao renomear uma categoria, produtos cacheados com o nome antigo também são invalidados.
+Invalidação cruzada garante consistência: ex. renomear categoria limpa cache de produtos que embutem o nome; criar produto atualiza `_count` da categoria.
+
+**Regra de negócio:** categoria com produtos vinculados não pode ser excluída (validação no service + `onDelete: Restrict` no Prisma).

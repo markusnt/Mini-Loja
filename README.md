@@ -1,6 +1,26 @@
 # Desafio NTT — Mini Loja
 
-Monorepo com frontend React e backend NestJS para o desafio técnico NTT.
+Aplicação full-stack para gerenciar produtos e categorias. Backend NestJS + Prisma + Redis; frontend React + Vite.
+
+## Visão geral
+
+```
+┌─────────────┐     proxy /api      ┌──────────────┐     Prisma     ┌────────────┐
+│  Frontend   │ ──────────────────► │   Backend    │ ────────────► │ PostgreSQL │
+│  React/Vite │   localhost:5173    │   NestJS     │               │  (Docker)  │
+└─────────────┘                     └──────┬───────┘               └────────────┘
+                                           │
+                                           │ cache GET
+                                           ▼
+                                    ┌────────────┐
+                                    │   Redis    │
+                                    │  (Docker)  │
+                                    └────────────┘
+```
+
+**Frontend:** listagem paginada de produtos, formulários e detalhes em painéis laterais (Sheet). CRUD de categorias.
+
+**Backend:** API REST em `/api` com validação via DTOs. Leituras de produtos e categorias passam pelo Redis; mutações invalidam o cache relacionado.
 
 ## Como subir
 
@@ -10,7 +30,7 @@ Monorepo com frontend React e backend NestJS para o desafio técnico NTT.
 docker compose up -d
 ```
 
-**2. Backend** (`http://localhost:3000/api`):
+**2. Backend** → `http://localhost:3000/api`
 
 ```bash
 cd backend
@@ -21,7 +41,7 @@ npm run prisma:migrate
 npm run start:dev
 ```
 
-**3. Frontend** (`http://localhost:5173`):
+**3. Frontend** → `http://localhost:5173`
 
 ```bash
 cd frontend
@@ -29,68 +49,67 @@ npm install
 npm run dev
 ```
 
-O Vite faz proxy de `/api` para o backend.
-
 ## Testar endpoints (curl)
 
 Base: `http://localhost:3000/api`
 
 ```bash
-# Health check
+# Health
 curl http://localhost:3000/api/health
 
 # Categorias
 curl -X POST http://localhost:3000/api/categories \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Eletrônicos"}'
-
+  -H "Content-Type: application/json" -d '{"name":"Eletrônicos"}'
 curl http://localhost:3000/api/categories
+curl "http://localhost:3000/api/categories?search=ele"
 curl http://localhost:3000/api/categories/1
-
 curl -X PATCH http://localhost:3000/api/categories/1 \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Eletrônicos e Acessórios"}'
-
+  -H "Content-Type: application/json" -d '{"name":"Eletrônicos e Acessórios"}'
 curl -X DELETE http://localhost:3000/api/categories/1
 
 # Produtos (paginado)
 curl "http://localhost:3000/api/products?page=1&limit=10"
 curl "http://localhost:3000/api/products?page=1&limit=10&search=notebook"
-
 curl -X POST http://localhost:3000/api/products \
   -H "Content-Type: application/json" \
   -d '{"name":"Notebook","description":"16GB RAM","price":3499.90,"categoryId":1}'
-
 curl http://localhost:3000/api/products/1
-
 curl -X PATCH http://localhost:3000/api/products/1 \
-  -H "Content-Type: application/json" \
-  -d '{"price":3299.90}'
-
+  -H "Content-Type: application/json" -d '{"price":3299.90}'
 curl -X DELETE http://localhost:3000/api/products/1
 ```
 
 Resposta paginada de `GET /products`:
 
 ```json
-{
-  "data": [/* produtos com category */],
-  "meta": { "page": 1, "limit": 10, "total": 42, "totalPages": 5 }
-}
+{ "data": [/* produtos com category */], "meta": { "page": 1, "limit": 10, "total": 42, "totalPages": 5 } }
 ```
 
 ## Estratégia de cache (Redis)
 
-| Chave | Conteúdo | TTL |
-|-------|----------|-----|
-| `products:list:page:{p}:limit:{l}:search:{term\|all}` | JSON da resposta paginada | 300s |
-| `products:item:{id}` | JSON do produto com categoria | 300s |
+TTL padrão: **300s** (5 min). Chaves via `SCAN` + `DEL` na invalidação em lote.
 
-**Fluxo:** `GET /products` e `GET /products/:id` consultam o Redis primeiro. Em cache miss, busca no PostgreSQL e grava no Redis.
+| Recurso | Chave | Quando invalida |
+|---------|-------|-----------------|
+| Lista de produtos | `products:list:page:{p}:limit:{l}:search:{term\|all}` | POST/PATCH/DELETE produto; PATCH/DELETE categoria |
+| Produto por ID | `products:item:{id}` | PATCH/DELETE produto; PATCH/DELETE categoria |
+| Lista de categorias | `categories:list:search:{term\|all}` | POST/PATCH/DELETE categoria; mutações de produto |
+| Categoria por ID | `categories:item:{id}` | PATCH/DELETE categoria; mutações de produto na categoria |
 
-**Invalidação:**
-- `POST /products` → remove todas as chaves `products:list:*`
-- `PATCH /products/:id` → remove `products:item:{id}` + todas as listas
-- `DELETE /products/:id` → remove `products:item:{id}` + todas as listas
+```
+GET /products ou /categories
+        │
+        ▼
+   Existe no Redis? ──sim──► retorna JSON cacheado
+        │
+       não
+        ▼
+   Consulta PostgreSQL ──► grava no Redis (TTL 300s) ──► retorna
 
-Isso garante que mutações nunca sirvam dados desatualizados; listas são invalidadas em lote via `SCAN` + `DEL`.
+POST / PATCH / DELETE
+        │
+        ▼
+   Invalida chaves afetadas ──► executa operação no banco
+```
+
+**Invalidação cruzada:** ao alterar um produto, o contador `_count.products` das categorias é atualizado no cache. Ao renomear uma categoria, produtos cacheados com o nome antigo também são invalidados.

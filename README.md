@@ -60,9 +60,12 @@ Valores para `backend/.env` com o Docker local:
 ```
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/desafio_ntt?schema=public"
 REDIS_URL="redis://localhost:6379"
+CACHE_TTL_SECONDS=300
 ```
 
 ## Testar endpoints
+
+**Swagger UI:** http://localhost:3000/api/docs — documentação interativa para explorar e testar a API.
 
 Base: `http://localhost:3000/api`
 
@@ -72,32 +75,30 @@ curl http://localhost:3000/api/health
 
 # Categorias (CRUD)
 curl -X POST http://localhost:3000/api/categories -H "Content-Type: application/json" -d '{"name":"Eletrônicos"}'
-curl http://localhost:3000/api/categories
 curl http://localhost:3000/api/categories/1
-curl -X PATCH http://localhost:3000/api/categories/1 -H "Content-Type: application/json" -d '{"name":"Informática"}'
 curl -X DELETE http://localhost:3000/api/categories/1   # 409 se houver produtos vinculados
 
 # Produtos (CRUD + paginação)
-curl "http://localhost:3000/api/products?page=1&limit=10&search=note"
+curl "http://localhost:3000/api/products?page=1&limit=10"
 curl -X POST http://localhost:3000/api/products -H "Content-Type: application/json" \
   -d '{"name":"Notebook","description":"16GB RAM","price":3499.90,"categoryId":1}'
 curl http://localhost:3000/api/products/1
-curl -X PATCH http://localhost:3000/api/products/1 -H "Content-Type: application/json" -d '{"price":3299.90}'
-curl -X DELETE http://localhost:3000/api/products/1
 ```
 
 `GET /products` retorna `{ data: Product[], meta: { page, limit, total, totalPages } }`.
 
 ## Estratégia de cache (Redis)
 
-Leituras (`GET /products`, `GET /products/:id`, `GET /categories`, `GET /categories/:id`) consultam Redis primeiro. Em cache miss, busca no PostgreSQL e grava com **TTL 300s**. Invalidação em lote via `SCAN` + `DEL`.
+Leituras (`GET /products`, `GET /products/:id`, `GET /categories`, `GET /categories/:id`) consultam Redis primeiro. Em cache miss, busca no PostgreSQL e grava com **TTL configurável** (`CACHE_TTL_SECONDS`, padrão **300s**). Invalidação em lote via `SCAN` + `DEL`.
+
+Se o Redis estiver indisponível, a API **continua respondendo** via PostgreSQL (GET/SET/DEL de cache falham silenciosamente com log de aviso). O endpoint `/health` ainda exige Redis ativo para reportar `status: ok`.
 
 | Chave | TTL | Invalidação |
 |-------|-----|-------------|
-| `products:list:page:{p}:limit:{l}:search:{s}` | 300s | mutação em produto ou categoria |
-| `products:item:{id}` | 300s | PATCH/DELETE produto; PATCH/DELETE categoria |
-| `categories:list:search:{s}` | 300s | mutação em categoria ou produto |
-| `categories:item:{id}` | 300s | PATCH/DELETE categoria; mutação de produto na categoria |
+| `products:list:page:{p}:limit:{l}:search:{s}` | `CACHE_TTL_SECONDS` | mutação em produto ou categoria |
+| `products:item:{id}` | `CACHE_TTL_SECONDS` | PATCH/DELETE produto; PATCH/DELETE categoria |
+| `categories:list:search:{s}` | `CACHE_TTL_SECONDS` | mutação em categoria ou produto |
+| `categories:item:{id}` | `CACHE_TTL_SECONDS` | PATCH/DELETE categoria; mutação de produto na categoria |
 
 ```
 GET /products ou /categories
@@ -107,7 +108,7 @@ GET /products ou /categories
         │
        não
         ▼
-   Consulta PostgreSQL ──► grava no Redis (TTL 300s) ──► retorna
+   Consulta PostgreSQL ──► grava no Redis (TTL configurável) ──► retorna
 
 POST / PATCH / DELETE
         │

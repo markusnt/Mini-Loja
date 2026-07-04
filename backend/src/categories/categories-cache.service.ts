@@ -3,7 +3,6 @@ import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class CategoriesCacheService {
-  private readonly ttlSeconds = 300;
   private readonly listPrefix = 'categories:list:';
   private readonly itemPrefix = 'categories:item:';
 
@@ -27,7 +26,7 @@ export class CategoriesCacheService {
     await this.redis.set(
       this.listKey(search),
       JSON.stringify(data),
-      this.ttlSeconds,
+      this.redis.cacheTtlSeconds,
     );
   }
 
@@ -40,7 +39,7 @@ export class CategoriesCacheService {
     await this.redis.set(
       this.itemKey(id),
       JSON.stringify(data),
-      this.ttlSeconds,
+      this.redis.cacheTtlSeconds,
     );
   }
 

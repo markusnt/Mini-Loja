@@ -5,7 +5,6 @@ import { PaginatedResponse } from './types/paginated-response.type';
 
 @Injectable()
 export class ProductsCacheService {
-  private readonly ttlSeconds = 300;
   private readonly listPrefix = 'products:list:';
   private readonly itemPrefix = 'products:item:';
 
@@ -29,7 +28,7 @@ export class ProductsCacheService {
     await this.redis.set(
       this.listKey(query),
       JSON.stringify(data),
-      this.ttlSeconds,
+      this.redis.cacheTtlSeconds,
     );
   }
 
@@ -42,7 +41,7 @@ export class ProductsCacheService {
     await this.redis.set(
       this.itemKey(id),
       JSON.stringify(data),
-      this.ttlSeconds,
+      this.redis.cacheTtlSeconds,
     );
   }
 

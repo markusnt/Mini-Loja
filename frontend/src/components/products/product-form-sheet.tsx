@@ -11,7 +11,7 @@ import {
 } from '@/lib/formatters'
 import type { Category, Product } from '@/types/catalog'
 
-type ProductFormDialogProps = {
+type ProductFormSheetProps = {
   open: boolean
   product?: Product | null
   onClose: () => void
@@ -23,12 +23,12 @@ type ProductFormDialogProps = {
   }) => Promise<void>
 }
 
-export function ProductFormDialog({
+export function ProductFormSheet({
   open,
   product,
   onClose,
   onSubmit,
-}: ProductFormDialogProps) {
+}: ProductFormSheetProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [price, setPrice] = useState('')

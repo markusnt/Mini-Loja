@@ -1,23 +1,23 @@
 import { useEffect, useState } from 'react'
 
-import { FormDialog } from '@/components/crud/form-dialog'
+import { FormSheet } from '@/components/crud/form-sheet'
 import { FormField } from '@/components/crud/form-field'
 import { Input } from '@/components/ui/input'
 import type { Category } from '@/types/catalog'
 
-type CategoryFormDialogProps = {
+type CategoryFormSheetProps = {
   open: boolean
   category?: Category | null
   onClose: () => void
   onSubmit: (name: string) => Promise<void>
 }
 
-export function CategoryFormDialog({
+export function CategoryFormSheet({
   open,
   category,
   onClose,
   onSubmit,
-}: CategoryFormDialogProps) {
+}: CategoryFormSheetProps) {
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -55,7 +55,7 @@ export function CategoryFormDialog({
   }
 
   return (
-    <FormDialog
+    <FormSheet
       open={open}
       title={isEditing ? 'Editar categoria' : 'Nova categoria'}
       description="Informe o nome da categoria."
@@ -73,6 +73,6 @@ export function CategoryFormDialog({
           autoFocus
         />
       </FormField>
-    </FormDialog>
+    </FormSheet>
   )
 }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 
 import { ErrorState, LoadingState } from '@/components/crud/status-message'
-import { ProductFormDialog } from '@/components/products/product-form-dialog'
+import { ProductFormSheet } from '@/components/products/product-form-sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -136,7 +136,7 @@ export function ProductDetailPanel({
         </SheetContent>
       </Sheet>
 
-      <ProductFormDialog
+      <ProductFormSheet
         open={editOpen}
         product={product}
         onClose={() => setEditOpen(false)}

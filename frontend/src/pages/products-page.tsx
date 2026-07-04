@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/crud/page-header'
 import { SearchInput } from '@/components/crud/search-input'
 import { ErrorState, LoadingState } from '@/components/crud/status-message'
 import { ProductDetailPanel } from '@/components/products/product-detail-panel'
-import { ProductFormDialog } from '@/components/products/product-form-dialog'
+import { ProductFormSheet } from '@/components/products/product-form-sheet'
 import { ProductsTable } from '@/components/products/products-table'
 import { useProducts } from '@/hooks/use-products'
 import type { Product } from '@/types/catalog'
@@ -110,7 +110,7 @@ export function ProductsPage() {
         )}
       </div>
 
-      <ProductFormDialog
+      <ProductFormSheet
         open={dialogOpen}
         product={editingProduct}
         onClose={handleCloseDialog}

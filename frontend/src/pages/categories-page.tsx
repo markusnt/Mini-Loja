@@ -1,11 +1,20 @@
 import { useState } from 'react'
 
-import { CategoryFormDialog } from '@/components/categories/category-form-dialog'
+import {
+  CategoryDetailPanel,
+  parseCategoryDeleteError,
+} from '@/components/categories/category-detail-panel'
+import { CategoryFormSheet } from '@/components/categories/category-form-sheet'
 import { CategoriesTable } from '@/components/categories/categories-table'
+import { InlineAlert } from '@/components/crud/inline-alert'
 import { PageHeader } from '@/components/crud/page-header'
 import { SearchInput } from '@/components/crud/search-input'
 import { ErrorState, LoadingState } from '@/components/crud/status-message'
 import { useCategories } from '@/hooks/use-categories'
+import {
+  getCategoryDeleteBlockReason,
+  isCategoryDeleteBlocked,
+} from '@/lib/category-rules'
 import type { Category } from '@/types/catalog'
 
 export function CategoriesPage() {
@@ -18,23 +27,28 @@ export function CategoriesPage() {
     removeCategory,
     createCategory,
     updateCategory,
+    reload,
   } = useCategories()
 
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+  const [viewingCategoryId, setViewingCategoryId] = useState<number | null>(
+    null,
+  )
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const handleOpenCreate = () => {
     setEditingCategory(null)
-    setDialogOpen(true)
+    setFormOpen(true)
   }
 
   const handleOpenEdit = (category: Category) => {
     setEditingCategory(category)
-    setDialogOpen(true)
+    setFormOpen(true)
   }
 
-  const handleCloseDialog = () => {
-    setDialogOpen(false)
+  const handleCloseForm = () => {
+    setFormOpen(false)
     setEditingCategory(null)
   }
 
@@ -48,6 +62,11 @@ export function CategoriesPage() {
   }
 
   const handleDelete = async (category: Category) => {
+    if (isCategoryDeleteBlocked(category)) {
+      setActionError(getCategoryDeleteBlockReason(category._count?.products ?? 0))
+      return
+    }
+
     const confirmed = window.confirm(
       `Deseja excluir a categoria "${category.name}"?`,
     )
@@ -56,12 +75,12 @@ export function CategoriesPage() {
       return
     }
 
+    setActionError(null)
+
     try {
       await removeCategory(category.id)
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : 'Erro ao excluir categoria.',
-      )
+      setActionError(parseCategoryDeleteError(err))
     }
   }
 
@@ -74,12 +93,19 @@ export function CategoriesPage() {
         onAction={handleOpenCreate}
       />
 
-      <div className="flex flex-1 flex-col gap-4 p-6">
+      <div className="flex flex-1 flex-col gap-4 overflow-x-hidden p-6">
         <SearchInput
           value={search}
           onChange={setSearch}
           placeholder="Buscar categoria..."
         />
+
+        {actionError ? (
+          <InlineAlert
+            message={actionError}
+            onDismiss={() => setActionError(null)}
+          />
+        ) : null}
 
         {isLoading ? (
           <LoadingState message="Carregando categorias..." />
@@ -88,17 +114,26 @@ export function CategoriesPage() {
         ) : (
           <CategoriesTable
             categories={categories}
+            onView={(category) => setViewingCategoryId(category.id)}
             onEdit={handleOpenEdit}
             onDelete={handleDelete}
           />
         )}
       </div>
 
-      <CategoryFormDialog
-        open={dialogOpen}
+      <CategoryFormSheet
+        open={formOpen}
         category={editingCategory}
-        onClose={handleCloseDialog}
+        onClose={handleCloseForm}
         onSubmit={handleSubmit}
+      />
+
+      <CategoryDetailPanel
+        open={viewingCategoryId !== null}
+        categoryId={viewingCategoryId}
+        onClose={() => setViewingCategoryId(null)}
+        onMutated={reload}
+        onActionError={setActionError}
       />
     </div>
   )

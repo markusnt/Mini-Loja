@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { FormDialog } from '@/components/crud/form-dialog'
+import { FormSheet } from '@/components/crud/form-sheet'
 import { FormField } from '@/components/crud/form-field'
 import { Input } from '@/components/ui/input'
 import { categoriesService } from '@/services/categories.service'
@@ -100,7 +100,7 @@ export function ProductFormDialog({
   }
 
   return (
-    <FormDialog
+    <FormSheet
       open={open}
       title={isEditing ? 'Editar produto' : 'Novo produto'}
       description="Preencha os dados do produto."
@@ -164,6 +164,6 @@ export function ProductFormDialog({
 
         {error ? <p className="text-destructive text-xs">{error}</p> : null}
       </div>
-    </FormDialog>
+    </FormSheet>
   )
 }

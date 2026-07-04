@@ -1,5 +1,3 @@
-import { Link } from 'react-router-dom'
-
 import { EmptyTableRow } from '@/components/crud/empty-table-row'
 import { RowActions } from '@/components/crud/row-actions'
 import { Badge } from '@/components/ui/badge'
@@ -17,12 +15,14 @@ import type { Product } from '@/types/catalog'
 
 type ProductsTableProps = {
   products: Product[]
+  onView?: (product: Product) => void
   onEdit?: (product: Product) => void
   onDelete?: (product: Product) => void
 }
 
 export function ProductsTable({
   products,
+  onView,
   onEdit,
   onDelete,
 }: ProductsTableProps) {
@@ -48,12 +48,13 @@ export function ProductsTable({
                 <TableRow key={product.id}>
                   <TableCell>{product.id}</TableCell>
                   <TableCell className="font-medium">
-                    <Link
-                      to={`/produtos/${product.id}`}
+                    <button
+                      type="button"
+                      onClick={() => onView?.(product)}
                       className="hover:underline"
                     >
                       {product.name}
-                    </Link>
+                    </button>
                   </TableCell>
                   <TableCell className="text-muted-foreground hidden max-w-xs truncate md:table-cell">
                     {product.description}

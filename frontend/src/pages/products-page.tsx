@@ -4,6 +4,7 @@ import { Pagination } from '@/components/crud/pagination'
 import { PageHeader } from '@/components/crud/page-header'
 import { SearchInput } from '@/components/crud/search-input'
 import { ErrorState, LoadingState } from '@/components/crud/status-message'
+import { ProductDetailPanel } from '@/components/products/product-detail-panel'
 import { ProductFormDialog } from '@/components/products/product-form-dialog'
 import { ProductsTable } from '@/components/products/products-table'
 import { useProducts } from '@/hooks/use-products'
@@ -22,10 +23,12 @@ export function ProductsPage() {
     removeProduct,
     createProduct,
     updateProduct,
+    reload,
   } = useProducts()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [viewingProductId, setViewingProductId] = useState<number | null>(null)
 
   const handleOpenCreate = () => {
     setEditingProduct(null)
@@ -98,6 +101,7 @@ export function ProductsPage() {
           <>
             <ProductsTable
               products={products}
+              onView={(product) => setViewingProductId(product.id)}
               onEdit={handleOpenEdit}
               onDelete={handleDelete}
             />
@@ -111,6 +115,13 @@ export function ProductsPage() {
         product={editingProduct}
         onClose={handleCloseDialog}
         onSubmit={handleSubmit}
+      />
+
+      <ProductDetailPanel
+        open={viewingProductId !== null}
+        productId={viewingProductId}
+        onClose={() => setViewingProductId(null)}
+        onMutated={reload}
       />
     </div>
   )

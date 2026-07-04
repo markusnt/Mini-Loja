@@ -3,12 +3,19 @@ import { useCallback, useEffect, useState } from 'react'
 import { productsService } from '@/services/products.service'
 import type { Product } from '@/types/catalog'
 
-export function useProduct(id: number) {
+export function useProduct(id: number | null) {
   const [product, setProduct] = useState<Product | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const loadProduct = useCallback(async () => {
+    if (!id || !Number.isFinite(id)) {
+      setProduct(null)
+      setIsLoading(false)
+      setError(null)
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
@@ -30,6 +37,10 @@ export function useProduct(id: number) {
   }, [loadProduct])
 
   const removeProduct = useCallback(async () => {
+    if (!id) {
+      return
+    }
+
     await productsService.remove(id)
   }, [id])
 
@@ -40,6 +51,10 @@ export function useProduct(id: number) {
       price: number
       categoryId: number
     }) => {
+      if (!id) {
+        return
+      }
+
       const updated = await productsService.update(id, data)
       setProduct(updated)
     },
